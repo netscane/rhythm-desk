@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useSettingsStore, STREAM_FORMATS, type StreamFormat } from '../stores/settings'
 import subsonicApi, { type MusicFolder } from '../api/subsonic'
 
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 const musicFolders = ref<MusicFolder[]>([])
 const isLoadingFolders = ref(false)
@@ -11,6 +13,11 @@ const isScanning = ref(false)
 const scanCount = ref(0)
 const scanError = ref('')
 let pollInterval: number | null = null
+
+function handleFormatChange(e: Event) {
+  const target = e.target as HTMLSelectElement
+  settingsStore.setDefaultFormat(target.value as StreamFormat)
+}
 
 async function loadMusicFolders() {
   isLoadingFolders.value = true
@@ -84,6 +91,32 @@ onUnmounted(() => {
           <div class="info-item">
             <span class="info-label">用户名</span>
             <span class="info-value">{{ authStore.username }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 播放设置 -->
+      <section class="settings-section">
+        <h2>播放设置</h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="setting-info">
+              <span class="info-label">默认播放格式</span>
+              <span class="setting-description">选择音频流的默认转码格式，"原始格式"表示不转码</span>
+            </div>
+            <select 
+              class="format-select"
+              :value="settingsStore.defaultFormat"
+              @change="handleFormatChange"
+            >
+              <option 
+                v-for="format in STREAM_FORMATS" 
+                :key="format.value" 
+                :value="format.value"
+              >
+                {{ format.label }}
+              </option>
+            </select>
           </div>
         </div>
       </section>
@@ -318,5 +351,32 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text-tertiary);
   padding: 12px 0;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-description {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.format-select {
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.format-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
 }
 </style>

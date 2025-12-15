@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../stores/player'
 import { useLibraryStore } from '../stores/library'
+import { useSettingsStore, STREAM_FORMATS, checkAudioFormatSupport, type StreamFormat } from '../stores/settings'
 import subsonicApi from '../api/subsonic'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
 const libraryStore = useLibraryStore()
+const settingsStore = useSettingsStore()
 
 const showQueue = ref(false)
+const showFormatMenu = ref(false)
+const formatSupport = ref<Map<StreamFormat, boolean>>(new Map())
+
+onMounted(() => {
+  formatSupport.value = checkAudioFormatSupport()
+})
 
 const coverUrl = computed(() => {
   if (playerStore.currentSong?.coverArt) {
@@ -74,6 +82,25 @@ function navigateToAlbum() {
 function toggleQueue() {
   showQueue.value = !showQueue.value
 }
+
+function toggleFormatMenu() {
+  showFormatMenu.value = !showFormatMenu.value
+}
+
+function selectFormat(format: StreamFormat) {
+  settingsStore.setCurrentFormat(format)
+  showFormatMenu.value = false
+  
+  // 如果有当前歌曲，重新加载以应用新格式
+  if (playerStore.currentSong) {
+    playerStore.reloadCurrentSong()
+  }
+}
+
+const currentFormatLabel = computed(() => {
+  const format = STREAM_FORMATS.find(f => f.value === settingsStore.currentFormat)
+  return format?.label || '原始格式'
+})
 
 function getSongCoverUrl(coverArt?: string) {
   if (coverArt) {
@@ -185,6 +212,33 @@ function getSongCoverUrl(coverArt?: string) {
 
     <!-- 音量控制 -->
     <div class="volume-controls">
+      <!-- 格式切换 -->
+      <div class="format-selector">
+        <button 
+          class="format-btn"
+          @click.stop="toggleFormatMenu"
+          title="切换播放格式"
+        >
+          {{ currentFormatLabel }}
+        </button>
+        <div v-if="showFormatMenu" class="format-menu" @click.stop>
+          <div 
+            v-for="format in STREAM_FORMATS" 
+            :key="format.value"
+            class="format-menu-item"
+            :class="{ 
+              active: settingsStore.currentFormat === format.value,
+              disabled: !formatSupport.get(format.value)
+            }"
+            @click="formatSupport.get(format.value) && selectFormat(format.value)"
+          >
+            {{ format.label }}
+            <span v-if="!formatSupport.get(format.value)" class="unsupported-badge">不支持</span>
+            <span v-else-if="settingsStore.defaultFormat === format.value" class="default-badge">默认</span>
+          </div>
+        </div>
+      </div>
+
       <button class="control-btn" @click.stop="playerStore.toggleMute">
         {{ playerStore.isMuted || playerStore.volume === 0 ? '🔇' : playerStore.volume < 0.5 ? '🔉' : '🔊' }}
       </button>
@@ -456,8 +510,85 @@ function getSongCoverUrl(coverArt?: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 200px;
+  width: 280px;
   justify-content: flex-end;
+}
+
+.format-selector {
+  position: relative;
+}
+
+.format-btn {
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.format-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.format-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.format-menu-item {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.format-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.format-menu-item.active {
+  color: var(--accent-color);
+}
+
+.default-badge {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.unsupported-badge {
+  font-size: 10px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.format-menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .volume-slider {

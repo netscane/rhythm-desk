@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import subsonicApi, { type Song } from '../api/subsonic'
+import { useSettingsStore } from './settings'
 
 export type RepeatMode = 'off' | 'all' | 'one'
 
@@ -64,7 +65,12 @@ export const usePlayerStore = defineStore('player', () => {
     })
 
     audio.addEventListener('durationchange', () => {
-      duration.value = audio.duration
+      // 如果 audio.duration 是有效值则使用，否则使用歌曲元数据中的 duration
+      if (audio.duration && isFinite(audio.duration)) {
+        duration.value = audio.duration
+      } else if (currentSong.value?.duration) {
+        duration.value = currentSong.value.duration
+      }
     })
 
     audio.addEventListener('ended', () => {
@@ -114,12 +120,47 @@ export const usePlayerStore = defineStore('player', () => {
     const audio = audioElement.value
     if (!audio) return
 
-    const url = subsonicApi.getStreamUrl(song.id)
+    // 先用歌曲元数据设置 duration（防止 FLAC 等格式无法获取时长）
+    if (song.duration) {
+      duration.value = song.duration
+    }
+
+    const settingsStore = useSettingsStore()
+    const url = subsonicApi.getStreamUrl(song.id, settingsStore.getStreamOptions())
     audio.src = url
     audio.play().catch(console.error)
 
     // 发送 scrobble (开始播放)
     subsonicApi.scrobble(song.id, undefined, false).catch(console.error)
+  }
+
+  // 重新加载当前歌曲（用于格式切换）
+  function reloadCurrentSong() {
+    const audio = audioElement.value
+    const song = currentSong.value
+    if (!audio || !song) return
+
+    const wasPlaying = isPlaying.value
+    const savedTime = currentTime.value
+
+    const settingsStore = useSettingsStore()
+    const url = subsonicApi.getStreamUrl(song.id, settingsStore.getStreamOptions())
+    
+    audio.src = url
+    
+    // 等待音频可以播放后恢复位置和状态
+    const onCanPlay = () => {
+      audio.removeEventListener('canplay', onCanPlay)
+      if (savedTime > 0) {
+        audio.currentTime = savedTime
+      }
+      if (wasPlaying) {
+        audio.play().catch(console.error)
+      }
+    }
+    
+    audio.addEventListener('canplay', onCanPlay)
+    audio.load()
   }
 
   // 播放/暂停
@@ -424,6 +465,7 @@ export const usePlayerStore = defineStore('player', () => {
     // 方法
     initAudio,
     playSong,
+    reloadCurrentSong,
     togglePlay,
     play,
     pause,

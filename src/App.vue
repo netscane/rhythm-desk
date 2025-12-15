@@ -3,10 +3,14 @@ import { onMounted } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { usePlayerStore } from './stores/player'
 import { useLibraryStore } from './stores/library'
+import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 
 const authStore = useAuthStore()
 const playerStore = usePlayerStore()
 const libraryStore = useLibraryStore()
+
+// 注册全局快捷键
+useKeyboardShortcuts()
 
 onMounted(async () => {
   // 初始化认证状态
